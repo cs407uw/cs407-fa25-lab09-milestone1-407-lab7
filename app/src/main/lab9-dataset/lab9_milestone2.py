@@ -1,5 +1,5 @@
 """
-CS407 Lab 9 – Milestone 2 (Alt Version)
+CS407 Lab 9 – Milestone 2 
 End-to-end processing and visualization of motion sensor data from:
 
     • ACCELERATION.csv
@@ -15,9 +15,6 @@ Overall flow:
   3. Identify ~90° turns using gyroscope readings.
   4. Fuse detected steps and turns to approximate a 2D walking path.
 
-Run this file from the same directory as the four CSVs:
-
-    python milestone2_analysis_refactored.py
 """
 
 import io
@@ -26,27 +23,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-# ============================================================
-# Generic helper functions
-# ============================================================
+# helper functions
 
 def integrate_trap(values: np.ndarray, dt: np.ndarray) -> np.ndarray:
-    """
-    Integrate a 1D signal using the trapezoidal rule.
 
-    Parameters
-    ----------
-    values : np.ndarray
-        Samples of the function f(t).
-    dt : np.ndarray
-        Time increment array, where dt[i] corresponds to the step between
-        sample i-1 and i.
-
-    Returns
-    -------
-    np.ndarray
-        Cumulative integral, same length as `values`.
-    """
     result = np.zeros_like(values, dtype=float)
     for i in range(1, len(values)):
         avg_val = 0.5 * (values[i] + values[i - 1])
@@ -55,47 +35,15 @@ def integrate_trap(values: np.ndarray, dt: np.ndarray) -> np.ndarray:
 
 
 def exp_smooth(x: np.ndarray, alpha: float) -> np.ndarray:
-    """
-    First-order exponential smoothing / low-pass filter.
-
-    Parameters
-    ----------
-    x : np.ndarray
-        Input samples.
-    alpha : float
-        Smoothing factor in [0, 1]. Higher alpha → more reactive,
-        lower alpha → smoother.
-
-    Returns
-    -------
-    np.ndarray
-        Filtered output sequence.
-    """
     s = np.zeros_like(x, dtype=float)
     s[0] = x[0]
     for i in range(1, len(x)):
         s[i] = alpha * x[i] + (1.0 - alpha) * s[i - 1]
     return s
 
-
-# ============================================================
 # Part 1 – Accumulation of error in acceleration data
-# ============================================================
 
 def part1_acceleration():
-    """
-    Part 1:
-      - Load ACCELERATION.csv
-      - Integrate both the “true” and “noisy” accelerations to obtain
-        velocity and then distance
-      - Save three PNGs:
-
-            part1_acceleration.png
-            part1_speed.png
-            part1_distance.png
-
-      - Print the final distances along with their difference.
-    """
     df = pd.read_csv("ACCELERATION.csv")
 
     t = df["timestamp"].values.astype(float)           # seconds
@@ -160,9 +108,7 @@ def part1_acceleration():
     return final_dist_true, final_dist_noisy, dist_error
 
 
-# ============================================================
 # Part 2 – Step detection using accelerometer magnitude
-# ============================================================
 
 def detect_steps_from_magnitude(
     t_ns: np.ndarray,
@@ -170,33 +116,6 @@ def detect_steps_from_magnitude(
     threshold: float,
     min_step_interval: float = 0.4,
 ):
-    """
-    Find footsteps by examining peaks in smoothed acceleration magnitude.
-
-    A sample i is marked as a step if:
-      • mag_smooth[i] is a local maximum,
-      • mag_smooth[i] exceeds `threshold`,
-      • at least `min_step_interval` seconds have passed since the
-        previously detected step.
-
-    Parameters
-    ----------
-    t_ns : np.ndarray
-        Timestamps in nanoseconds.
-    mag_smooth : np.ndarray
-        Smoothed magnitude |a|.
-    threshold : float
-        Minimum amplitude considered to be a valid step.
-    min_step_interval : float
-        Minimum time gap (in seconds) between consecutive steps.
-
-    Returns
-    -------
-    step_indices : np.ndarray
-        Indices where steps were detected.
-    t_sec : np.ndarray
-        Time array converted to seconds since start.
-    """
     t_sec = (t_ns - t_ns[0]) / 1e9
     step_indices = []
     last_step_time = t_sec[0]
@@ -215,15 +134,6 @@ def detect_steps_from_magnitude(
 
 
 def part2_step_detection():
-    """
-    Part 2:
-      - Load WALKING.csv
-      - Compute acceleration magnitude sqrt(ax² + ay² + az²)
-      - Apply exponential smoothing (alpha = 0.1)
-      - Use a threshold of (mean + 1.0) and a local-max test to find steps
-      - Save the plot as: part2_walking_mag_steps.png
-      - Print the total number of detected steps.
-    """
     df = pd.read_csv("WALKING.csv")
 
     t_ns = df["timestamp"].values.astype(np.float64)
@@ -267,37 +177,13 @@ def part2_step_detection():
 
     return step_indices, t_sec, mag_smooth
 
-
-# ============================================================
 # Part 3 – Turn detection using gyro_z
-# ============================================================
 
 def detect_turns_from_gyro(
     t_ns: np.ndarray,
     gyro_z_smooth: np.ndarray,
     vel_threshold: float = 0.3,
 ):
-    """
-    Segment turning motions by integrating gyro_z whenever the angular
-    speed is large enough.
-
-    A turn is defined as a contiguous region where |gyro_z| > vel_threshold.
-    For each such region we integrate gyro_z to estimate the net rotation.
-
-    Parameters
-    ----------
-    t_ns : np.ndarray
-        Timestamps in nanoseconds.
-    gyro_z_smooth : np.ndarray
-        Smoothed angular rate about the z-axis (rad/s).
-    vel_threshold : float
-        Angular velocity cutoff used to decide if the user is rotating.
-
-    Returns
-    -------
-    list of (int, int, float)
-        Each entry is (start_idx, end_idx, angle_rad).
-    """
     dt = np.diff(t_ns, prepend=t_ns[0]) / 1e9
 
     turns = []
@@ -330,16 +216,6 @@ def detect_turns_from_gyro(
 
 
 def part3_direction_detection():
-    """
-    Part 3:
-      - Load TURNING.csv
-      - Strip stray trailing commas so pandas can read the file
-      - Smooth gyro_z (alpha = 0.1)
-      - Declare a turn when |gyro_z| > 0.3 rad/s and integrate to
-        estimate total angle
-      - Summarize each turn in degrees (≈ ±90°)
-      - Save: part3_turning_gyro.png
-    """
     # Some datasets include an extra comma at the end of certain lines.
     # Here we remove one trailing comma per line before parsing.
     with open("TURNING.csv", "r", encoding="utf-8") as f:
@@ -393,22 +269,9 @@ def part3_direction_detection():
 
     return summaries, t_sec, gyro_z_smooth
 
-
-# ============================================================
 # Part 4 – Approximate 2D trajectory (steps + turns)
-# ============================================================
 
 def part4_trajectory():
-    """
-    Part 4:
-      - Load WALKING_AND_TURNING.csv (which has a slightly odd layout)
-      - Treat the row index as the timestamp in nanoseconds
-      - Remap the remaining columns to accel / gyro channels
-      - Use accel magnitude to find steps and gyro_z to locate turns
-      - Only keep turns whose magnitude exceeds 30°
-      - Assume 1 m per step and integrate heading to get a rough path
-      - Save: part4_trajectory.png
-    """
     # WALKING_AND_TURNING.csv uses an unusual column configuration, so
     # we treat the index as time and reinterpret the fields by inspection.
     raw = pd.read_csv("WALKING_AND_TURNING.csv", engine="python")
@@ -438,7 +301,7 @@ def part4_trajectory():
         min_step_interval=0.4,
     )
 
-    # ----- Turn detection via gyro_z (similar to Part 3) -----
+    # Turn detection via gyro_z (similar to Part 3)
     gyro_z_smooth = exp_smooth(gyro_z, alpha=0.1)
 
     # Optional reference plot for gyro_z while walking & turning.
@@ -516,9 +379,7 @@ def part4_trajectory():
           f"y = {y_positions[-1]:.2f} m\n")
 
 
-# ============================================================
 # Main entry point
-# ============================================================
 
 def main():
     print("Starting Milestone 2 sensor analysis script...\n")
